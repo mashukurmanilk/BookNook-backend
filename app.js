@@ -1,24 +1,38 @@
 import "dotenv/config";
 import express from "express";
-import { connectToMongoDB } from "./config/db.js";
-import dns from "dns";
-
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+import cors from "cors";
+import bookRoutes from "./routes/book.routes.js";
+import borrowRoutes from "./routes/borrow.routes.js";
+import { notFoundHandler, errorHandler } from "./middlewares/error.middleware.js";
 
 const app = express();
-const PORT = process.env.PORT || 8000;
-app.use(express.json());
 
-connectToMongoDB()
-  .then((client) => {
-    const db = client.db("BookNook");
-    const booksCollection = db.collection("books");
-    console.log("Connected to MongoDB");
+// Global Middlewares
+app.use(
+  cors({
+    origin: process.env.CLIENT_URL || "*",
+    credentials: true,
   })
-  .catch((err) => {
-    console.error("Failed to connect to MongoDB:", err);
-  });
+);
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+// Health check / welcome route
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "BookNook API is running smoothly",
+    version: "1.0.0",
+    timestamp: new Date().toISOString(),
+  });
 });
+
+// Mount Resource Routes
+app.use("/books", bookRoutes);
+app.use("/borrows", borrowRoutes);
+
+// 404 & Centralized Error Handlers
+app.use(notFoundHandler);
+app.use(errorHandler);
+
+export default app;

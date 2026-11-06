@@ -56,7 +56,7 @@ export const borrowBook = async (req, res, next) => {
     const updatedBook = await Book.findOneAndUpdate(
       { _id: bookId, availableCopies: { $gt: 0 } },
       { $inc: { availableCopies: -1 } },
-      { new: true }
+      { returnDocument: "after" }
     );
 
     if (!updatedBook) {

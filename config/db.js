@@ -1,20 +1,30 @@
-import { MongoClient } from "mongodb";
+import mongoose from "mongoose";
 
-let client;
+let isConnected = false;
 
 export async function connectToMongoDB() {
+  if (isConnected) {
+    return mongoose.connection;
+  }
+
+  const uri = process.env.MONGODB_URI;
+  if (!uri) {
+    throw new Error("MONGODB_URI is not defined in environment variables");
+  }
+
   try {
-    if (!client) {
-      if (!process.env.MONGODB_URI) {
-        throw new Error("MONGODB_URI is not defined in the environment variables");
-      }
-      client = new MongoClient(process.env.MONGODB_URI);
-    }
-    await client.connect();
-    console.log("You successfully connected to MongoDB!");
-    return client;
-  } catch (err) {
-    console.error("MongoDB connection error:", err);
-    throw err;
+    const conn = await mongoose.connect(uri, {
+      dbName: process.env.DB_NAME || "BookNook",
+    });
+
+    isConnected = true;
+    console.log(`MongoDB Connected successfully: ${conn.connection.host}`);
+    return conn.connection;
+  } catch (error) {
+    console.error("MongoDB connection error:", error.message);
+    throw error;
   }
 }
+
+export const connectDB = connectToMongoDB;
+export default connectToMongoDB;

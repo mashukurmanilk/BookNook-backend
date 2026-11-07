@@ -1,13 +1,11 @@
 import { test, before, after, describe } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import jwt from "jsonwebtoken";
+import { generateKeyPair, exportJWK, SignJWT } from "jose";
 import app from "../app.js";
 import { connectToMongoDB } from "../config/db.js";
 import Book from "../models/Book.model.js";
 import Borrow from "../models/Borrow.model.js";
-
-const JWT_SECRET = process.env.JWT_SECRET || "booknook_jwt_super_secret_key_2026";
 
 // Test users
 const userA = {
@@ -22,9 +20,10 @@ const userB = {
   name: "Bob Reader",
 };
 
-const tokenA = jwt.sign(userA, JWT_SECRET, { expiresIn: "1h" });
-const tokenB = jwt.sign(userB, JWT_SECRET, { expiresIn: "1h" });
-
+let keyPair;
+let publicJwk;
+let tokenA;
+let tokenB;
 let server;
 let baseUrl;
 
@@ -50,8 +49,23 @@ async function request(path, options = {}) {
   return { status: res.status, data };
 }
 
-describe("BookNook Backend API Integration Tests", () => {
+describe("BookNook Backend API Integration Tests with JWKS", () => {
   before(async () => {
+    // 1. Generate an RSA keypair to mock Better Auth JWKS server
+    keyPair = await generateKeyPair("RS256");
+    const jwk = await exportJWK(keyPair.publicKey);
+    publicJwk = {
+      ...jwk,
+      kid: "test-key-1",
+      alg: "RS256",
+      use: "sig",
+    };
+
+    // 2. Mount Better Auth JWKS endpoint for testing
+    app.get("/api/auth/jwks", (req, res) => {
+      res.json({ keys: [publicJwk] });
+    });
+
     await connectToMongoDB();
 
     // Start HTTP server on dynamic port
@@ -59,6 +73,25 @@ describe("BookNook Backend API Integration Tests", () => {
     await new Promise((resolve) => server.listen(0, resolve));
     const port = server.address().port;
     baseUrl = `http://localhost:${port}`;
+
+    process.env.BETTER_AUTH_URL = baseUrl;
+
+    // Sign tokens matching Better Auth format
+    tokenA = await new SignJWT(userA)
+      .setProtectedHeader({ alg: "RS256", kid: "test-key-1" })
+      .setIssuer(baseUrl)
+      .setAudience(baseUrl)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(keyPair.privateKey);
+
+    tokenB = await new SignJWT(userB)
+      .setProtectedHeader({ alg: "RS256", kid: "test-key-1" })
+      .setIssuer(baseUrl)
+      .setAudience(baseUrl)
+      .setIssuedAt()
+      .setExpirationTime("1h")
+      .sign(keyPair.privateKey);
   });
 
   after(async () => {
@@ -96,9 +129,9 @@ describe("BookNook Backend API Integration Tests", () => {
 
   let createdBookId;
 
-  test("4. POST /books - Create book with valid token", async () => {
+  test("4. POST /books - Create book with valid JWKS-verified token", async () => {
     const newBook = {
-      title: "Clean Architecture for Testing",
+      title: "Clean Architecture with JWKS",
       author: "Robert Martin",
       category: "Science",
       image: "https://i.ibb.co/example.jpg",
@@ -144,12 +177,12 @@ describe("BookNook Backend API Integration Tests", () => {
     const res = await request(`/books/${createdBookId}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${tokenA}` },
-      body: { title: "Clean Architecture (Updated Edition)" },
+      body: { title: "Clean Architecture (Updated with JWKS)" },
     });
 
     assert.equal(res.status, 200);
     assert.equal(res.data.success, true);
-    assert.equal(res.data.data.title, "Clean Architecture (Updated Edition)");
+    assert.equal(res.data.data.title, "Clean Architecture (Updated with JWKS)");
   });
 
   let createdBorrowId;
@@ -169,7 +202,7 @@ describe("BookNook Backend API Integration Tests", () => {
 
     assert.equal(res.status, 201);
     assert.equal(res.data.success, true);
-    assert.equal(res.data.data.bookTitle, "Clean Architecture (Updated Edition)");
+    assert.equal(res.data.data.bookTitle, "Clean Architecture (Updated with JWKS)");
 
     createdBorrowId = res.data.data._id;
 

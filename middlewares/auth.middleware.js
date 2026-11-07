@@ -1,6 +1,40 @@
-import jwt from "jsonwebtoken";
+import { jwtVerify, createRemoteJWKSet } from "jose";
 
-export const verifyToken = (req, res, next) => {
+const getAuthBaseUrl = () => {
+  return (process.env.BETTER_AUTH_URL || "http://localhost:3000").replace(/\/$/, "");
+};
+
+// Cache the remote JWK Set client
+let jwksClient;
+let cachedBaseUrl;
+
+const getJWKS = () => {
+  const baseUrl = getAuthBaseUrl();
+  if (!jwksClient || cachedBaseUrl !== baseUrl) {
+    cachedBaseUrl = baseUrl;
+    jwksClient = createRemoteJWKSet(new URL(`${baseUrl}/api/auth/jwks`));
+  }
+  return jwksClient;
+};
+
+export async function validateToken(token) {
+  try {
+    const baseUrl = getAuthBaseUrl();
+    const JWKS = getJWKS();
+
+    const { payload } = await jwtVerify(token, JWKS, {
+      issuer: process.env.BETTER_AUTH_ISSUER || baseUrl,
+      audience: process.env.BETTER_AUTH_AUDIENCE || baseUrl,
+    });
+
+    return payload;
+  } catch (error) {
+    console.error("Token validation failed:", error.message);
+    throw error;
+  }
+}
+
+export const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -11,23 +45,14 @@ export const verifyToken = (req, res, next) => {
   }
 
   const token = authHeader.split(" ")[1];
-  const secret = process.env.JWT_SECRET || process.env.BETTER_AUTH_SECRET;
-
-  if (!secret) {
-    console.error("JWT_SECRET or BETTER_AUTH_SECRET is not configured");
-    return res.status(500).json({
-      success: false,
-      message: "Server configuration error: Authentication secret is missing",
-    });
-  }
 
   try {
-    const decoded = jwt.verify(token, secret);
+    const payload = await validateToken(token);
 
     req.user = {
-      id: decoded.id || decoded.sub || decoded._id,
-      email: decoded.email,
-      name: decoded.name || decoded.userName || decoded.email,
+      id: payload.id || payload.sub || payload._id,
+      email: payload.email,
+      name: payload.name || payload.userName || payload.email,
     };
 
     if (!req.user.email) {

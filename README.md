@@ -22,7 +22,7 @@ A RESTful backend service for **BookNook** library management system, built with
 - **Runtime**: Node.js (ES Modules, v20+)
 - **Framework**: Express.js 5
 - **Database**: MongoDB Atlas with Mongoose 9
-- **Authentication**: JSON Web Tokens (`jsonwebtoken`)
+- **Authentication**: Better Auth with JWKS verification via `jose`
 - **Testing**: Node.js native test runner (`node:test`, `node:assert`)
 
 ---
@@ -34,9 +34,8 @@ Create a `.env` file in the project root:
 ```env
 PORT=8000
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster0.example.mongodb.net/BookNook?retryWrites=true&w=majority
-JWT_SECRET=your_jwt_secret_key_here
-BETTER_AUTH_SECRET=your_better_auth_secret_here
 CLIENT_URL=http://localhost:3000
+BETTER_AUTH_URL=http://localhost:3000
 ```
 
 ---
@@ -88,10 +87,12 @@ npm test
 
 ---
 
-## 🔒 Authentication Flow
+## 🔒 Authentication Flow (Better Auth + JWKS)
 
-1. Include the JWT token in request headers for protected endpoints:
+1. Client signs in with Better Auth on the Next.js frontend (`http://localhost:3000`).
+2. Requests sent to protected Express endpoints pass the bearer token:
    ```http
-   Authorization: Bearer <your_jwt_token>
+   Authorization: Bearer <better_auth_jwt_token>
    ```
-2. The `verifyToken` middleware decodes the token and attaches `req.user` (`{ id, email, name }`) to the request.
+3. Express's `verifyToken` middleware fetches the public JWKS from `BETTER_AUTH_URL/api/auth/jwks` using `jose.createRemoteJWKSet` and verifies the token's signature, issuer, and audience.
+4. The decoded payload (`id`, `email`, `name`) is attached to `req.user`.

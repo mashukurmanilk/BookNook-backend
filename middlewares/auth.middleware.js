@@ -18,19 +18,30 @@ const getJWKS = () => {
 };
 
 export async function validateToken(token) {
-  try {
-    const baseUrl = getAuthBaseUrl();
-    const JWKS = getJWKS();
+  const baseUrl = getAuthBaseUrl();
+  const secretKey = process.env.BETTER_AUTH_SECRET || process.env.JWT_SECRET;
 
+  // 1. First attempt verification with remote JWKS
+  try {
+    const JWKS = getJWKS();
     const { payload } = await jwtVerify(token, JWKS, {
       issuer: process.env.BETTER_AUTH_ISSUER || baseUrl,
       audience: process.env.BETTER_AUTH_AUDIENCE || baseUrl,
     });
-
     return payload;
-  } catch (error) {
-    console.error("Token validation failed:", error.message);
-    throw error;
+  } catch (jwksError) {
+    // 2. If JWKS failed, try symmetric secret if available
+    if (secretKey) {
+      try {
+        const secret = new TextEncoder().encode(secretKey);
+        const { payload } = await jwtVerify(token, secret);
+        return payload;
+      } catch (secretError) {
+        // Fall back to original error
+      }
+    }
+    console.error("Token validation failed:", jwksError.message);
+    throw jwksError;
   }
 }
 

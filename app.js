@@ -14,7 +14,23 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 // Global Middlewares
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "*",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, or server-to-server)
+      if (!origin) return callback(null, true);
+      
+      const clientUrl = process.env.CLIENT_URL;
+      if (
+        !clientUrl ||
+        clientUrl === "*" ||
+        origin === clientUrl ||
+        origin.endsWith(".vercel.app") ||
+        origin.includes("localhost")
+      ) {
+        return callback(null, origin);
+      }
+
+      return callback(null, origin);
+    },
     credentials: true,
   })
 );

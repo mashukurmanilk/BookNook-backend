@@ -33,7 +33,6 @@ export async function validateToken(token) {
     const candidateSecrets = [
       process.env.BETTER_AUTH_SECRET,
       process.env.JWT_SECRET,
-      "bAh3cafK3EUAK9zConQGD8ll3yPjRIhSS",
       "booknook_super_secure_jwt_auth_secret_2026_key",
     ].filter(Boolean);
 

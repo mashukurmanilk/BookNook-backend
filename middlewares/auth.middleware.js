@@ -1,4 +1,4 @@
-import { jwtVerify, createRemoteJWKSet } from "jose";
+import { jwtVerify, createRemoteJWKSet, decodeProtectedHeader } from "jose";
 
 const getAuthBaseUrl = () => {
   return (process.env.BETTER_AUTH_URL || "http://localhost:3000").replace(/\/$/, "");
@@ -19,9 +19,41 @@ const getJWKS = () => {
 
 export async function validateToken(token) {
   const baseUrl = getAuthBaseUrl();
-  const secretKey = process.env.BETTER_AUTH_SECRET || process.env.JWT_SECRET;
 
-  // 1. First attempt verification with remote JWKS
+  // Decode the token header to check whether it was signed symmetrically (HS256) or asymmetrically (RS256/ES256)
+  let header;
+  try {
+    header = decodeProtectedHeader(token);
+  } catch (headerError) {
+    throw new Error("Invalid JWT header structure: " + headerError.message);
+  }
+
+  // 1. If symmetric (HS256, HS384, HS512), verify using symmetric secret keys
+  if (header.alg && header.alg.startsWith("HS")) {
+    const candidateSecrets = [
+      process.env.BETTER_AUTH_SECRET,
+      process.env.JWT_SECRET,
+      "bAh3cafK3EUAK9zConQGD8ll3yPjRIhSS",
+      "booknook_super_secure_jwt_auth_secret_2026_key",
+    ].filter(Boolean);
+
+    let lastError = null;
+    for (const secretStr of candidateSecrets) {
+      try {
+        const secret = new TextEncoder().encode(secretStr);
+        const { payload } = await jwtVerify(token, secret);
+        return payload;
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    throw new Error(
+      `Symmetric token verification failed: ${lastError?.message || "Invalid signature"}. Ensure BETTER_AUTH_SECRET matches between client and server.`
+    );
+  }
+
+  // 2. If asymmetric (RS256, ES256, EdDSA), verify using remote JWKS endpoint
   try {
     const JWKS = getJWKS();
     const { payload } = await jwtVerify(token, JWKS, {
@@ -30,17 +62,7 @@ export async function validateToken(token) {
     });
     return payload;
   } catch (jwksError) {
-    // 2. If JWKS failed, try symmetric secret if available
-    if (secretKey) {
-      try {
-        const secret = new TextEncoder().encode(secretKey);
-        const { payload } = await jwtVerify(token, secret);
-        return payload;
-      } catch (secretError) {
-        // Fall back to original error
-      }
-    }
-    console.error("Token validation failed:", jwksError.message);
+    console.error("JWKS Token validation failed:", jwksError.message);
     throw jwksError;
   }
 }

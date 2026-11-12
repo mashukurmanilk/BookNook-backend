@@ -9,7 +9,14 @@ import dns from "node:dns";
 const app = express();
 
 
-dns.setServers(['8.8.8.8', '8.8.4.4']);
+// Only override DNS servers on local environments (Vercel/AWS restricts external UDP 53)
+if (!process.env.VERCEL) {
+  try {
+    dns.setServers(["8.8.8.8", "8.8.4.4"]);
+  } catch (e) {
+    // Ignore DNS override errors
+  }
+}
 
 // Global Middlewares
 app.use(
@@ -39,18 +46,23 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 
-app.get("/", (req, res) => {
+const healthHandler = (req, res) => {
   res.status(200).json({
     success: true,
     message: "BookNook API is running smoothly",
     version: "1.0.0",
     timestamp: new Date().toISOString(),
   });
-});
+};
 
-// Mount Resource Routes
+app.get("/", healthHandler);
+app.get("/api", healthHandler);
+
+// Mount Resource Routes (support both /books and /api/books for flexible client configurations)
 app.use("/books", bookRoutes);
+app.use("/api/books", bookRoutes);
 app.use("/borrows", borrowRoutes);
+app.use("/api/borrows", borrowRoutes);
 
 // 404 & Centralized Error Handlers
 app.use(notFoundHandler);

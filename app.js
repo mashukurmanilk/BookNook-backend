@@ -4,8 +4,12 @@ import cors from "cors";
 import bookRoutes from "./routes/book.routes.js";
 import borrowRoutes from "./routes/borrow.routes.js";
 import { notFoundHandler, errorHandler } from "./middlewares/error.middleware.js";
+import dns from "node:dns";
 
 const app = express();
+
+
+dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 // Global Middlewares
 app.use(
@@ -14,10 +18,11 @@ app.use(
     credentials: true,
   })
 );
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check / welcome route
+
 app.get("/", (req, res) => {
   res.status(200).json({
     success: true,

@@ -17,10 +17,7 @@ export async function connectToMongoDB() {
     return mongoose.connection;
   }
 
-  const uri =
-    process.env.MONGODB_URI ||
-    "mongodb://mashukurmanik_booknook:0lr2CpeFzLVvG5Nd@ac-s0yaqn0-shard-00-00.jcsvfv3.mongodb.net:27017,ac-s0yaqn0-shard-00-01.jcsvfv3.mongodb.net:27017,ac-s0yaqn0-shard-00-02.jcsvfv3.mongodb.net:27017/?ssl=true&replicaSet=atlas-rza791-shard-0&authSource=admin";
-
+  const uri = process.env.MONGODB_URI
 
   try {
     const conn = await mongoose.connect(uri, {
